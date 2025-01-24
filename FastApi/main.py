@@ -45,6 +45,7 @@ async def webhook(request:Request):
     try:
         body=await request.json()
         city_name=body.get("intentInfo").get("parameters").get("cityname").get("resolvedValue")
+        country_name=body.get("intentInfo").get("parameters").get("cityname").get("resolvedValue")
         response_text=""
         
         try:
