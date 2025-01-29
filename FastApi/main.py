@@ -8,8 +8,8 @@ from fpdf import FPDF
 
 app = FastAPI()
 
-SERP_API_KEY="56da5953668597b4e81275951c6bb3fa4724bd63e9fc84842edf3e31137f4e13"
-GEMINI_API_KEY="AIzaSyA7l1u7gKqCI6kXrX5kqVYBxTvO8dkq6RE"
+SERP_API_KEY="<SERP API HERE>"
+GEMINI_API_KEY="<GEMINI API HERE>"
 GEMINI_URL=f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
 def topic_extracter( raw_query):
