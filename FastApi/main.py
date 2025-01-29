@@ -1,93 +1,150 @@
 from fastapi import FastAPI, Request
 import requests
+import json
+import requests  
+from serpapi import GoogleSearch
+import re
+from fpdf import FPDF
 
 app = FastAPI()
 
+SERP_API_KEY="56da5953668597b4e81275951c6bb3fa4724bd63e9fc84842edf3e31137f4e13"
+GEMINI_API_KEY="AIzaSyA7l1u7gKqCI6kXrX5kqVYBxTvO8dkq6RE"
+GEMINI_URL=f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-# /webhook
-@app.post("/webhook")
-async def webhook(request:Request):
-    body=await request.json()
-    
-    intent_name=body.get("queryResult").get("intent").get("displayName")
-    print(intent_name)
-    variable_name=body.get("queryResult").get("parameters").get("processor_name")
-    context_name=body.get("session")+"/contexts/proccesor_info"
-    response={
-        "fulfillmentMessages":[
-            {
-                "text":{
-                    "text":[
-                        "Yes Server is Available"
-                    ]
-                }
-            }
-        ],
-        "outputContexts": [
-            {
-                "name": context_name, 
-                "lifespanCount": 5,  
-                "parameters": {
-                    "processor_name": variable_name,
-                    "processor_price":20
-                }
-            }
-        ]
+def topic_extracter( raw_query):
+    prompt = f"""
+    Extract the Topic from the following sentence:
+
+    Sentence:
+    {raw_query}
+
+    **Output:**
+    * Only the topic itself. 
+    * No other information or analysis.
+    """
+
+    data = {
+        "contents": [{"parts": [{"text": prompt}]}]
     }
-    # Return the response
-    return response
 
+    headers = {
+        "Content-Type": "application/json"
+    }
 
-
-# /webhook/weather
-@app.post("/webhook/weather")
-async def webhook(request:Request):
+    response = requests.post(GEMINI_URL, headers=headers, data=json.dumps(data))
+    result = response.json()
+    # Extract generated text
     try:
-        body=await request.json()
-        city_name=body.get("intentInfo").get("parameters").get("cityname").get("resolvedValue")
-        country_name=body.get("intentInfo").get("parameters").get("cityname").get("resolvedValue")
-        response_text=""
-        
-        try:
-            url = f"https://p2pclouds.up.railway.app/v1/learn/weather?city={city_name}"
-            response = requests.get(url)
-            data = response.json()
-            temp_c=data.get("current").get("temp_c")
-            feelslike_c=data.get("current").get("feelslike_c")
-            wind_kph=data.get("current").get("wind_kph")
-            humidity=data.get("current").get("humidity")
-            api_city_name=data.get("location").get("name")
-            api_region_name=data.get("location").get("region")
-            api_country_name=data.get("location").get("country")
-            
-            response_text=f"""
-            {api_city_name}, {api_region_name}, {api_country_name}
-            In {city_name} it's {temp_c}°C and feels like {feelslike_c}°C. The wind speed is {wind_kph} km/h and the humidity is {humidity}%."""
-            
-        except Exception as e:
-            response_text=f"Something went wrong while getting weather details of {city_name}"
-            
-        response = {
-            "fulfillmentResponse": {
-                "messages": [
-                    {
-                        "text": {
-                            "text": [response_text]
-                        }
-                    }
-                ]
-            },
-        }
-        # Return the response
-        return response
+        topic = result["candidates"][0]["content"]["parts"][0]["text"]
     except Exception as e:
         print(e)
-        return { "fulfillmentResponse": {
-                "messages": [
-                    {
-                        "text": {
-                            "text": ["Something went wrong"]
+        topic ="No Topic"
+
+    return topic
+
+def book_content_generation(topic, raw_text):
+    prompt = f"""
+    Process the following raw information into a structured book format on '{topic}'.
+    Ensure it includes:
+    - An introduction
+    - At least 3 sections with sub-sections(if any)
+    - Ad real easy examples
+    - A conclusion
+    - also remove pledge and humanize it.
+
+    Raw Data:
+    {raw_text}
+    """
+
+    data = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(GEMINI_URL, headers=headers, data=json.dumps(data))
+    result = response.json()
+    # Extract generated text
+    try:
+        content = result["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception as e:
+        print(e)
+        content ="Something went wrong"
+
+    return content
+
+def search_content(topic):
+    params = {
+        "q": topic,
+        "api_key": SERP_API_KEY,
+        "num": 10 
+    }
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    content = ""
+    for item in results["organic_results"]:
+        content += f"{item['title']}\n{item['snippet']}\n{item['redirect_link']}\n"
+    
+    return content
+
+def clean_text(text):
+    """Replace unsupported characters with ASCII equivalents."""
+    replacements = {
+        "\u2018": "'", "\u2019": "'",  # Smart single quotes → '
+        "\u201C": '"', "\u201D": '"',  # Smart double quotes → "
+        "\u2013": "-", "\u2014": "--",  # Dashes → -
+        "\u2026": "..."  # Ellipsis → ...
+    }
+    for key, value in replacements.items():
+        text = text.replace(key, value)
+    
+    # Remove other non-ASCII characters
+    text = re.sub(r"[^\x00-\x7F]+", "", text)  
+    return text
+
+def create_pdf(book_title, book_content):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    book_title = clean_text(book_title)
+    book_content = clean_text(book_content)
+
+    pdf.cell(200, 10, book_title, ln=True, align="C")
+    pdf.ln(10)  # Line break
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 10, book_content)
+
+    filename = f"{book_title.replace(' ', '_').replace('\n','')}.pdf"
+    pdf.output(filename, "F")
+    return filename
+
+# /webhook
+@app.post("/v1/agent/content/book")
+async def webhook(request:Request):
+    body=await request.json()
+    query=body['text']
+    extracted_topic=topic_extracter(query)
+    print(extracted_topic)
+    raw_data=search_content(extracted_topic)
+    print(raw_data)
+    content=book_content_generation(extracted_topic,raw_data)
+    print(content)
+    create_pdf(extracted_topic,content)
+    response = {
+                "fulfillmentResponse": {
+                    "messages": [
+                        {
+                            "text": {
+                                "text": ["Working"]
+                            }
                         }
-                    }
-                ]
-            }}
+                    ]
+                },
+            }
+    # Return the response
+    return response
