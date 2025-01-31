@@ -2,7 +2,7 @@ import requests
 import json
 from langchain_ollama import ChatOllama
 
-GEMINI_API_KEY="AIzaSyAYWBwTfL3qwRhgo4IXMPyVSwdh1USBLCI"
+GEMINI_API_KEY="GEMINI_KEY"
 GEMINI_URL=f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
 def book_content_generation(topic, raw_text):

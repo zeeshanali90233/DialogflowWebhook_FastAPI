@@ -1,7 +1,7 @@
 from serpapi import GoogleSearch
 
 
-SERP_API_KEY="7f9efbc3163fdb6b0295ee9a47709cc12a74c850bdd548f56ff4f28eff6797ae"
+SERP_API_KEY="<SERP API>"
 
 def search_content(topic):
     params = {
